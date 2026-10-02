@@ -115,6 +115,51 @@ export function createTutor({ level = "A2", scenarioId = "free", spoken = false 
   return { reply, start, messages, scenario };
 }
 
+// Napi hibaelemzés: a nap hibáiból magyar nyelvű magyarázat és gyakorló mondatok.
+export async function analyzeMistakes(reportText, { level = "A2" } = {}) {
+  const settings = getSettings();
+  if (!settings.apiKey) throw new Error("Nincs megadva Claude API kulcs (Beállítások).");
+  const Anthropic = await loadSdk();
+  const client = new Anthropic({ apiKey: settings.apiKey, dangerouslyAllowBrowser: true });
+  const model = settings.model || MODELS[0].id;
+  const system = [
+    "You are an experienced English teacher for Hungarian adults. Write your answer in Hungarian.",
+    `The learner reads English well (about B2) but speaks and understands spoken English at about ${level} level.`,
+    "You get today's practice log: what the learner should have said or heard, and what they actually said or typed.",
+    "Speech recognition made the 'said' text, so a single odd word may be a recognition error rather than a real mistake; focus on errors that repeat.",
+    "",
+    "Write:",
+    "1. At most three recurring mistake patterns, most important first. For each: a short heading, one or two sentences explaining the rule simply, and one typical example from the log (wrong → right).",
+    "2. One short, encouraging sentence about what went well, if anything did.",
+    "3. Finally a section titled exactly GYAKORLÓ MONDATOK with 6 to 8 new, short, everyday sentences that drill exactly these patterns, one per line, in this exact format:",
+    "EN: <English sentence> | HU: <Hungarian translation>",
+    "",
+    "Keep the whole answer short and practical. Plain text, no markdown tables.",
+  ].join("\n");
+  const params = { model, max_tokens: 4000, system, messages: [{ role: "user", content: reportText }] };
+  if (!model.startsWith("claude-haiku")) params.output_config = { effort: "medium" };
+  try {
+    const stream = FALLBACK_MODELS.has(model)
+      ? client.beta.messages.stream({ ...params, betas: ["server-side-fallback-2026-07-01"], fallbacks: "default" })
+      : client.messages.stream(params);
+    const message = await stream.finalMessage();
+    if (message.stop_reason === "refusal") throw new Error("Az AI most nem tudta elemezni a naplót.");
+    return extractText(message.content);
+  } catch (err) {
+    throw friendlyError(err);
+  }
+}
+
+// Az elemzés végéről kiszedi az „EN: … | HU: …” sorokat.
+export function parsePracticeLines(text) {
+  const items = [];
+  for (const line of String(text).split(/\r?\n/)) {
+    const m = /^\s*(?:[-*\d.)\s]*)EN:\s*(.+?)\s*\|\s*HU:\s*(.+?)\s*$/i.exec(line);
+    if (m) items.push({ en: m[1], hu: m[2] });
+  }
+  return items;
+}
+
 function friendlyError(err) {
   const status = err && (err.status || (err.error && err.error.status));
   if (status === 401) return new Error("Érvénytelen API kulcs. Ellenőrizd a Beállításokban.");

@@ -1,8 +1,8 @@
 // Offline gyorsítótár: az app fájljai internet nélkül is betöltődnek (az AI-beszélgetés kivételével).
-const CACHE = "angol-beszed-v1";
+const CACHE = "angol-beszed-v2";
 const FILES = [
   "./", "index.html", "manifest.json", "icon.svg", "css/style.css",
-  "js/app.js", "js/assessment.js", "js/carmode.js", "js/drills.js", "js/score.js",
+  "js/app.js", "js/assessment.js", "js/carmode.js", "js/drills.js", "js/mistakes.js", "js/report.js", "js/score.js",
   "js/speech.js", "js/storage.js", "js/tutor.js", "js/tutorview.js", "js/ui.js",
   "data/assessment.js", "data/exercises.js", "data/phrases.js",
 ];

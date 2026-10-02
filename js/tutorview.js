@@ -4,6 +4,7 @@ import { createTutor, isConfigured, SCENARIOS } from "./tutor.js";
 import { speak, listen, stopAll, support } from "./speech.js";
 import { getSettings, logActivity } from "./storage.js";
 import { html, mount, $ } from "./ui.js";
+import { recordAiCorrection } from "./mistakes.js";
 
 export function render(container) {
   let cancelled = false;
@@ -90,6 +91,7 @@ export function render(container) {
           ? await tutor.start({ onText })
           : await tutor.reply(userText, { onText });
         if (cancelled) return;
+        if (userText !== null) recordAiCorrection(userText, answer);
         textNode.textContent = answer;
         bubble.dataset.text = answer;
         if (autoSpeak) speak(answer, { rate: getSettings().rate });

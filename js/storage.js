@@ -80,8 +80,14 @@ export function allAssessments() {
   return load().assessments;
 }
 
+// Helyi idő szerinti nap (YYYY-MM-DD), hogy az éjfél utáni gyakorlás is a jó napra kerüljön.
+export function localDay(date = new Date()) {
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
 function today() {
-  return new Date().toISOString().slice(0, 10);
+  return localDay();
 }
 
 // Egy gyakorlás rögzítése a napi statisztikába.
@@ -105,8 +111,8 @@ export function streak() {
   let count = 0;
   const d = new Date();
   // ha ma még nem volt gyakorlás, tegnaptól számolunk
-  if (!activity[d.toISOString().slice(0, 10)]) d.setDate(d.getDate() - 1);
-  while (activity[d.toISOString().slice(0, 10)]) {
+  if (!activity[localDay(d)]) d.setDate(d.getDate() - 1);
+  while (activity[localDay(d)]) {
     count++;
     d.setDate(d.getDate() - 1);
   }

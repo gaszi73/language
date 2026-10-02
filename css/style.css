@@ -197,6 +197,20 @@ body.driving header.top nav { display: none; }
 
 .prose h3 { margin-top: 1.4em; }
 
+/* Napló */
+.pattern { border-left: 3px solid var(--accent); padding: 2px 0 2px 12px; margin: 12px 0; }
+.pattern p { margin: 4px 0; }
+.example { color: var(--muted); }
+.tag { display: inline-block; font-size: 12px; padding: 1px 7px; border-radius: 999px; background: var(--bg); border: 1px solid var(--border); color: var(--muted); vertical-align: middle; }
+.tag.bad { color: var(--bad); border-color: var(--bad); }
+.chip { display: inline-block; margin: 2px 4px 2px 0; padding: 2px 9px; border-radius: 999px; background: var(--bg); border: 1px solid var(--border); font-size: 14px; }
+.chip.good { color: var(--good); border-color: var(--good); }
+ul.mistakes { list-style: none; padding: 0; margin: 0; }
+ul.mistakes li { display: flex; gap: 8px; align-items: flex-start; padding: 8px 0; border-bottom: 1px solid var(--border); }
+ul.mistakes li > div { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+button.icon { border: 0; background: none; cursor: pointer; font-size: 18px; min-width: 36px; min-height: 36px; color: var(--muted); }
+.ai-text { white-space: pre-wrap; background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 12px; margin: 10px 0; }
+
 .toast {
   position: fixed;
   left: 50%;

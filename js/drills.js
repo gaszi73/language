@@ -6,10 +6,12 @@ import { compare, compareAlternatives, verdict } from "./score.js";
 import { speak, listen, stopAll, support } from "./speech.js";
 import { getSettings, pickCards, recordAnswer, logActivity, levelIndex, shuffle, cardStats } from "./storage.js";
 import { html, mount, $, diffView, percent, VERDICT_TEXT } from "./ui.js";
+import { recordResult, activeWeakItems, weakAsItems, MASTERED_STREAK } from "./mistakes.js";
 
 const ROUND = 10;
 
 const MODES = {
+  mistakes: { title: "Makacs mondataim", icon: "🎯", desc: "A rontott mondatok – addig jönnek, amíg háromszor egymás után nem mennek." },
   dictation: { title: "Diktálás", icon: "🎧", desc: "Meghallgatod, begépeled. A hallás utáni értés legjobb edzése." },
   speak: { title: "Kiejtés", icon: "🗣️", desc: "Felolvasod a mondatot, a gép megmutatja, mit értett belőle." },
   translate: { title: "Mondd angolul", icon: "🔁", desc: "Magyar mondat → szóban angolul. Ez építi a beszédet." },
@@ -28,7 +30,7 @@ export function render(container, mode) {
       <section class="card">
         <h2>Esti gyakorlás</h2>
         <p class="muted">Napi 15–20 perc: egy kör diktálás + egy kör „Mondd angolul” + 5 perc AI-beszélgetés ideális.</p>
-        <p class="muted small">Mondatok: ${stats.started}/${stats.total} elkezdve, ${stats.learned} begyakorolva.</p>
+        <p class="muted small">Mondatok: ${stats.started}/${stats.total} elkezdve, ${stats.learned} begyakorolva · makacs mondat: ${activeWeakItems().length} · <a href="#/report">Napi napló →</a></p>
       </section>
       <div class="grid">
         ${Object.entries(MODES).map(([key, m]) => html`
@@ -102,6 +104,7 @@ export function render(container, mode) {
         const score = slow ? res.score * 0.8 : res.score;
         scores.push(score);
         recordAnswer(item.id, score);
+        recordResult({ mode: "dictation", itemId: item.id, expected: text, hu: item.hu, heard: $(container, "#answer").value, result: { ...res, score } });
         done++;
         $(container, "#check").disabled = true;
         $(container, "#feedback").innerHTML = html`
@@ -163,7 +166,7 @@ export function render(container, mode) {
         const res = compareAlternatives(expected(item), transcripts);
         const v = VERDICT_TEXT[verdict(res.score)];
         scores.push(res.score);
-        onScore(item, res.score);
+        onScore(item, res.score, res);
         done++;
         $(container, "#feedback").innerHTML = html`
           <div class="feedback">
@@ -189,7 +192,10 @@ export function render(container, mode) {
       prompt: (item) => html`<p class="prompt">${item.en[0]}</p><p class="muted">${item.hu}</p>`,
       expected: (item) => [item.en[0]],
       model: (item) => item.en[0],
-      onScore: (item, score) => recordAnswer(item.id, Math.min(score, 0.85)),
+      onScore: (item, score, res) => {
+        recordAnswer(item.id, Math.min(score, 0.85));
+        recordResult({ mode: "speak", itemId: item.id, expected: item.en[0], hu: item.hu, result: res });
+      },
     });
   }
 
@@ -199,7 +205,10 @@ export function render(container, mode) {
       prompt: (item) => html`<p class="prompt">${item.hu}</p><p class="muted small">${TOPICS[item.topic].name} · ${item.level}</p>`,
       expected: (item) => item.en,
       model: (item) => item.en[0],
-      onScore: (item, score) => recordAnswer(item.id, score),
+      onScore: (item, score, res) => {
+        recordAnswer(item.id, score);
+        recordResult({ mode: "translate", itemId: item.id, expected: item.en[0], hu: item.hu, result: res });
+      },
     });
   }
 
@@ -226,8 +235,10 @@ export function render(container, mode) {
       $(container, "#fast").onclick = () => speak(item.clear, { rate: 1.2 });
       $(container, "#slow").onclick = () => speak(item.clear, { rate: settings.slowRate });
       const submit = () => {
-        const res = compare(item.clear, $(container, "#answer").value);
+        const typed = $(container, "#answer").value;
+        const res = compare(item.clear, typed);
         scores.push(res.score);
+        recordResult({ mode: "connected_typed", itemId: item.id, expected: item.clear, hu: item.hu, heard: typed, result: res });
         done++;
         $(container, "#check").disabled = true;
         $(container, "#feedback").innerHTML = html`
@@ -290,6 +301,18 @@ export function render(container, mode) {
         btn.onclick = () => {
           const ok = btn.dataset.choice === target;
           scores.push(ok ? 1 : 0);
+          if (!ok) {
+            const chosen = item[btn.dataset.choice];
+            recordResult({
+              mode: "pairs",
+              itemId: item.id,
+              expected: word,
+              hu: target === "a" ? item.huA : item.huB,
+              heard: chosen,
+              result: { score: 0, missing: [word], extra: [chosen], expected: word, heard: chosen },
+              extraPatterns: [`sound:${item.sound.trim()}`],
+            });
+          }
           done++;
           container.querySelectorAll("[data-choice]").forEach((b) => { b.disabled = true; });
           $(container, "#feedback").innerHTML = html`
@@ -327,7 +350,37 @@ export function render(container, mode) {
     step(0);
   }
 
-  const needsMic = mode === "speak" || mode === "translate";
+  // ---- Makacs mondatok: magyarból szóban; fordítás nélkülieknél felolvasás ----
+  function mistakesDrill() {
+    const items = weakAsItems().slice(0, ROUND);
+    if (!items.length) {
+      mount(container, html`
+        <section class="card">
+          <p class="step"><a href="#/practice">← Gyakorlás</a></p>
+          <h2>🎯 Nincs makacs mondat</h2>
+          <p>Most nincs olyan mondat, ami nem ment. Gyakorolj, és amit elrontasz, ide kerül.</p>
+        </section>`);
+      return;
+    }
+    micDrill({
+      items,
+      prompt: (item) => {
+        const w = activeWeakItems().find((x) => (x.itemId || x.key) === item.id);
+        const info = w ? html`<p class="muted small">Eddig ${w.fails}× nem ment · sorozat: ${w.streak || 0}/${MASTERED_STREAK}${w.lastHeard ? html` · utoljára ezt mondtad: „${w.lastHeard}”` : ""}</p>` : "";
+        return item.hu
+          ? html`<p class="prompt">${item.hu}</p>${info}`
+          : html`<p class="muted">Mondd ki (AI-javítás):</p><p class="prompt">${item.en[0]}</p>${info}`;
+      },
+      expected: (item) => item.en,
+      model: (item) => item.en[0],
+      onScore: (item, score, res) => {
+        recordAnswer(item.id, score);
+        recordResult({ mode: item.hu ? "review" : "speak", itemId: item.id, expected: item.en[0], hu: item.hu, result: res });
+      },
+    });
+  }
+
+  const needsMic = mode === "speak" || mode === "translate" || mode === "mistakes";
   if (needsMic && !support.stt) {
     mount(container, html`
       <section class="card">
@@ -337,7 +390,7 @@ export function render(container, mode) {
     return () => {};
   }
 
-  ({ dictation, speak: speakDrill, translate: translateDrill, connected, pairs })[mode]();
+  ({ dictation, speak: speakDrill, translate: translateDrill, connected, pairs, mistakes: mistakesDrill })[mode]();
 
   return () => {
     cancelled = true;

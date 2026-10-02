@@ -17,6 +17,13 @@ A tanulási terv: [docs/TANULASI_TERV.md](docs/TANULASI_TERV.md)
 - **🌙 Esti gyakorlás:** diktálás, kiejtés, „Mondd angolul”, gyors beszéd, minimálpárok.
 - **🤖 AI beszélgetőpartner (opcionális):** saját Claude API kulccsal szabad beszélgetés vagy
   szerepjáték, rövid javításokkal – szövegesen, szóban, és az autós módban is.
+- **📋 Napi napló és célzott gyakorlás:** minden nem sikerült mondat elmentődik (mit kellett volna
+  mondani, mit mondtál). A napló felismeri a visszatérő hibamintákat (névelők, segédigék,
+  elöljárószók, -s/-ed végződés, th és w/v hang, szórend, hasonló hangzású szavak, „nem jött válasz”),
+  és magyarul elmagyarázza őket. A **makacs mondatok** addig jönnek vissza („🎯 Makacs mondataim”,
+  autóban „Célzott menet”), amíg háromszor egymás után fejből helyesen ki nem mondod őket.
+  A napló egy gombbal megosztható vagy e-mailben elküldhető; API kulccsal az AI is elemzi a napot,
+  és gyakorló mondatokat ír a hibáidra.
 - **Haladás:** ismétlési rendszer (a rontott mondatok hamarabb jönnek vissza), napi statisztika,
   sorozat, felmérések összevetése. Minden a böngészőben tárolódik.
 - 220+ gyakori beszélt mondat 15 témában (A1–B2), 24 összevont beszéd gyakorlat, 18 minimálpár.
@@ -79,6 +86,8 @@ js/carmode.js     – autós mód
 js/drills.js      – esti gyakorlatok
 js/tutor.js       – Claude API kliens (AI partner)
 js/tutorview.js   – AI chat képernyő
+js/mistakes.js    – hibanapló, hibaminták, makacs mondatok
+js/report.js      – napi napló képernyő, megosztás / e-mail
 data/*.js         – mondatok, gyakorlatok, felmérés anyaga
 sw.js, manifest.json – telepíthető, offline működés
 ```

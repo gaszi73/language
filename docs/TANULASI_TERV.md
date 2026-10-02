@@ -31,6 +31,7 @@ nem vesz el időt máshonnan.
 | Reggel, autóban | 30 perc | Beszéd: utánmondás, fordítás szóban, gyors beszéd, kérdés–válasz | 🚗 Autós mód |
 | Délután, autóban | 30 perc | Ismétlés (a hibázott mondatok visszajönnek) vagy AI-beszélgetés; heti 1–2× podcast | 🚗 Autós mód |
 | Este | 15–20 perc | Hallás: diktálás / minimálpárok + „Mondd angolul” + néha AI | 🌙 Esti gyakorlás, 🤖 AI |
+| Este, a végén | 5 perc | Napi napló átnézése, makacs mondatok célzott köre | 📋 Napló, 🎯 Makacs mondataim |
 | Hetente 1× | 1 epizód | Sorozat angol hanggal, **angol** felirattal | – |
 
 **Biztonság:** vezetés közben csak hanggal használd. Indítás előtt tedd a telefont tartóba,
@@ -91,6 +92,16 @@ Cél: valódi, anyanyelvi beszéd megértése, hosszabb saját megszólalások.
   „blokkot”.
 - **Ha nem értesz valamit:** a „Ha nem érted” téma mondatai (Could you repeat that, please?)
   az elsők, amiket élesben is használni fogsz.
+
+## Hibákból tanulás
+
+Minden nem sikerült mondat bekerül a **Napi naplóba**, a visszatérő mintákkal (pl. kimaradó
+segédige, névelő, th hang) és rövid magyar magyarázattal. A rontott mondatok „makacs mondat”
+lesznek: addig jönnek vissza, amíg **háromszor egymás után fejből** helyesen ki nem mondod őket.
+
+- Este 5 perc: nézd át a naplót, és csinálj egy kört a „🎯 Makacs mondataim” gyakorlásból.
+- Ha sok a makacs mondat: a reggeli autós menetet indítsd **Célzott menet** módban.
+- Hetente egyszer (API kulccsal): „AI-elemzés”, és a javasolt gyakorló mondatok felvétele.
 
 ## Heti önellenőrzés (vasárnap, 2 perc)
 

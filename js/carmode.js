@@ -7,6 +7,7 @@ import { compareAlternatives, normalize, verdict } from "./score.js";
 import { speak, listen, stopAll, support, getVoices, wait } from "./speech.js";
 import { getSettings, updateSettings, pickCards, recordAnswer, logActivity, getCard, levelIndex, shuffle } from "./storage.js";
 import { createTutor, isConfigured, SCENARIOS } from "./tutor.js";
+import { recordResult, recordAiCorrection, activeWeakItems, weakAsItems } from "./mistakes.js";
 import { html, mount, $ } from "./ui.js";
 
 class Stopped extends Error {}
@@ -31,7 +32,14 @@ export function detectCommand(transcript) {
 }
 
 // A menet blokkjai és időarányuk.
-export function planSession(minutes, { withAi = false } = {}) {
+export function planSession(minutes, { withAi = false, focus = false } = {}) {
+  if (focus) {
+    // célzott menet: csak a makacs mondatok – előbb meghallgatod és utánamondod, aztán magyarból
+    return [
+      { kind: "weakShadow", name: "Makacs mondatok: hallgasd és ismételd", weight: 0.3 },
+      { kind: "review", name: "Makacs mondatok: mondd angolul", weight: 0.7 },
+    ].map((b) => ({ ...b, seconds: Math.round(minutes * 60 * b.weight) }));
+  }
   const blocks = [
     { kind: "shadow", name: "Bemelegítés: hallgasd és ismételd", weight: 0.15 },
     { kind: "translate", name: "Fordítós gyakorlat", weight: 0.3 },
@@ -39,7 +47,7 @@ export function planSession(minutes, { withAi = false } = {}) {
     withAi
       ? { kind: "ai", name: "Beszélgetés az AI-val", weight: 0.25 }
       : { kind: "qa", name: "Kérdés–válasz", weight: 0.25 },
-    { kind: "review", name: "Ismétlés: a hibázott mondatok", weight: 0.15 },
+    { kind: "review", name: "Ismétlés: a makacs mondatok", weight: 0.15 },
   ];
   return blocks.map((b) => ({ ...b, seconds: Math.round(minutes * 60 * b.weight) }));
 }
@@ -58,6 +66,7 @@ export function render(container) {
   function setup() {
     hasHu = getVoices("hu").length > 0;
     const aiReady = isConfigured();
+    const weakCount = activeWeakItems().length;
     mount(container, html`
       <section class="card">
         <h2>🚗 Autós mód</h2>
@@ -82,6 +91,7 @@ export function render(container) {
             ${[0.7, 0.8, 0.85, 0.9, 1].map((r) => html`<option value="${r}" ${r === Number(settings.rate) ? "selected" : ""}>${r === 1 ? "természetes (1.0)" : r}</option>`)}
           </select>
         </label>
+        <label class="check"><input type="checkbox" id="focus" ${weakCount ? "" : "disabled"}> 🎯 Célzott menet: csak a makacs mondatok ${weakCount ? html`<span class="muted">(${weakCount} db)</span>` : html`<span class="muted">(még nincs ilyen)</span>`}</label>
         <label class="check"><input type="checkbox" id="ai" ${aiReady ? "" : "disabled"}> AI beszélgetés a kérdés–válasz rész helyett ${aiReady ? "" : html`<span class="muted">(ehhez API kulcs kell a Beállításokban)</span>`}</label>
         <label id="scenario-wrap" hidden>Téma
           <select id="scenario">${SCENARIOS.map((s) => html`<option value="${s.id}" ${s.id === "car" ? "selected" : ""}>${s.label}</option>`)}</select>
@@ -95,7 +105,8 @@ export function render(container) {
       updateSettings({ rate });
       const withAi = $(container, "#ai").checked;
       const scenarioId = $(container, "#scenario").value;
-      start(minutes, withAi, scenarioId);
+      const focus = $(container, "#focus").checked;
+      start(minutes, withAi, scenarioId, focus);
     };
   }
 
@@ -268,16 +279,18 @@ export function render(container) {
     updateStats();
     await say(model); // természetes tempóban még egyszer
     recordAnswer(item.id, Math.min(result.score, 0.85)); // az utánmondás nem jelenti, hogy "tudja" a mondatot
+    recordResult({ mode: "shadow", itemId: item.id, expected: model, hu: item.hu, result });
   }
 
   async function translateItem(item) {
     const model = item.en[0];
     show("text", "");
     show("hu", item.hu);
-    if (!hasHu) return shadowItem(item);
+    if (!hasHu || !item.hu) return shadowItem(item);
     const result = await prompted(() => sayHu(item.hu), item.en);
     if (result.skipped) return;
     show("text", model);
+    recordResult({ mode: item.weak ? "review" : "translate", itemId: item.id, expected: model, hu: item.hu, result });
     const v = await feedback(result, model);
     recordAnswer(item.id, result.score);
     if (v !== "correct") {
@@ -299,6 +312,7 @@ export function render(container) {
       stats.items++;
       if (result.score >= 0.9) stats.correct++;
       updateStats();
+      recordResult({ mode: "connected", itemId: item.id, expected: item.clear, hu: item.hu, result });
       if (!result.silent && result.score >= 0.9) await say("Nice!", { rate: 1 });
     }
     await sayHu(item.hu);
@@ -363,6 +377,7 @@ export function render(container) {
         show("status", "AI gondolkodik…");
         text = await tutor.reply(userText);
         check();
+        recordAiCorrection(userText, text);
         show("status", "");
       } catch (err) {
         if (err instanceof Stopped) throw err;
@@ -377,13 +392,18 @@ export function render(container) {
   function itemsFor(kind) {
     const level = getSettings().level;
     if (kind === "shadow" || kind === "translate") return pickCards(PHRASES, 60, { level });
+    if (kind === "weakShadow") return weakAsItems();
     if (kind === "review") {
-      const mistakes = PHRASES.filter((p) => {
+      // először a makacs mondatok (a legtöbbször rontottak elöl), aztán a Leitner szerint gyenge kártyák
+      const weak = weakAsItems();
+      const seen = new Set(weak.map((w) => w.id));
+      const mistakes = shuffle(PHRASES.filter((p) => {
         const c = getCard(p.id);
-        return c && c.box <= 1 && c.seen > 0;
-      });
+        return c && c.box <= 1 && c.seen > 0 && !seen.has(p.id);
+      }));
+      const list = [...weak, ...mistakes];
       // ha még nincs hibázott mondat, új fordítós mondatok jönnek
-      return mistakes.length ? shuffle(mistakes) : pickCards(PHRASES, 60, { level });
+      return list.length ? list : pickCards(PHRASES, 60, { level });
     }
     const maxLevel = levelIndex(level) + 1;
     if (kind === "connected") return shuffle(CONNECTED.filter((c) => levelIndex(c.level) <= maxLevel));
@@ -393,7 +413,7 @@ export function render(container) {
 
   async function runItems(kind, seconds) {
     const until = Date.now() + seconds * 1000;
-    const handlers = { shadow: shadowItem, translate: translateItem, review: translateItem, connected: connectedItem, qa: qaItem };
+    const handlers = { shadow: shadowItem, weakShadow: shadowItem, translate: translateItem, review: translateItem, connected: connectedItem, qa: qaItem };
     const items = itemsFor(kind);
     for (const item of items) {
       if (Date.now() >= until) break;
@@ -402,7 +422,7 @@ export function render(container) {
     }
   }
 
-  async function start(minutes, withAi, scenarioId) {
+  async function start(minutes, withAi, scenarioId, focus = false) {
     running = true;
     paused = false;
     hasHu = getVoices("hu").length > 0;
@@ -410,12 +430,12 @@ export function render(container) {
     stats = { items: 0, correct: 0 };
     driveScreen();
     await requestWakeLock();
-    const plan = planSession(minutes, { withAi });
+    const plan = planSession(minutes, { withAi, focus });
     try {
       await say("Let's practise English. Here we go!", { rate: 1 });
       for (const block of plan) {
         show("block", block.name);
-        if (block.kind === "shadow") { await sayHu("Hallgasd meg, és ismételd utánam."); }
+        if (block.kind === "shadow" || block.kind === "weakShadow") { await sayHu("Hallgasd meg, és ismételd utánam."); }
         if (block.kind === "translate" || block.kind === "review") { await sayHu(hasHu ? "Mondd angolul!" : ""); }
         if (block.kind === "connected") { await sayHu("Gyors beszéd: előbb lassan, aztán gyorsan hallod. Ismételd a gyorsat."); }
         if (block.kind === "qa") { await sayHu("Kérdéseket hallasz. Válaszolj szabadon, egész mondatokban."); }

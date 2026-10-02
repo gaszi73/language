@@ -4,13 +4,15 @@ import * as assessment from "./assessment.js";
 import * as carmode from "./carmode.js";
 import * as drills from "./drills.js";
 import * as tutorView from "./tutorview.js";
+import * as report from "./report.js";
+import { activeWeakItems, logForDay } from "./mistakes.js";
 import { LEVEL_TEXT } from "./assessment.js";
 import { PHRASES } from "../data/phrases.js";
 import { MODELS } from "./tutor.js";
 import { speak, getVoices, setPreferredVoice, support, stopAll } from "./speech.js";
 import {
   getSettings, updateSettings, latestAssessment, allAssessments, streak, activityDays,
-  cardStats, exportData, importData, resetProgress,
+  cardStats, exportData, importData, resetProgress, localDay,
 } from "./storage.js";
 import { html, mount, $, percent, toast } from "./ui.js";
 
@@ -41,10 +43,12 @@ function home(container) {
   const phase = phaseFor(week || 1);
   const stats = cardStats(PHRASES);
   const activity = activityDays();
-  const todayKey = new Date().toISOString().slice(0, 10);
+  const todayKey = localDay();
   const today = activity[todayKey];
   const days = Object.keys(activity).sort().slice(-14);
   const settings = getSettings();
+  const weakCount = activeWeakItems().length;
+  const todayMistakes = new Set(logForDay(todayKey).map((e) => e.key)).size;
 
   mount(container, html`
     ${last ? "" : html`
@@ -65,6 +69,15 @@ function home(container) {
         <span class="small">Diktálás, kiejtés, AI-beszélgetés</span>
       </a>
     </div>
+    ${weakCount || todayMistakes ? html`
+      <section class="card highlight">
+        <h3>🎯 ${weakCount} makacs mondat vár</h3>
+        <p>${todayMistakes ? `Ma ${todayMistakes} mondat nem ment. ` : ""}Egy 5 perces célzott kör sokat segít, hogy ezek is a helyükre kerüljenek.</p>
+        <div class="row">
+          ${weakCount ? html`<a class="btn primary" href="#/practice/mistakes">Gyakorold most</a>` : ""}
+          <a class="btn" href="#/report">📋 Napi napló</a>
+        </div>
+      </section>` : ""}
     <section class="card">
       <h3>Állapot</h3>
       <div class="stats">
@@ -184,6 +197,13 @@ function settingsView(container) {
       <button class="btn primary" id="save-ai">Mentés</button>
     </section>
     <section class="card">
+      <h3>Napi napló</h3>
+      <label>E-mail cím a napló küldéséhez (opcionális)
+        <input type="text" id="report-email" inputmode="email" value="${s.reportEmail || ""}" placeholder="pl. te@gmail.com" autocomplete="email">
+      </label>
+      <p class="muted small">A Napló oldalon az „E-mail” gomb ezzel a címzettel nyitja meg a levelezőt, kitöltött összefoglalóval.</p>
+    </section>
+    <section class="card">
       <h3>Adatok</h3>
       <p class="muted small">A haladás ebben a böngészőben tárolódik. Másik eszközre exporttal/importtal viheted át.</p>
       <div class="row">
@@ -200,6 +220,7 @@ function settingsView(container) {
   $(container, "#hu-voice").onchange = (e) => { updateSettings({ huVoice: e.target.value }); setPreferredVoice("hu", e.target.value); };
   $(container, "#test-en").onclick = () => speak("Hello! This is how I sound. Could you repeat that, please?", { rate: getSettings().rate });
   $(container, "#test-hu").onclick = () => speak("Szia! Így hangzik a magyar hang.", { lang: "hu-HU" });
+  $(container, "#report-email").onchange = (e) => { updateSettings({ reportEmail: e.target.value.trim() }); toast("Mentve"); };
   $(container, "#save-ai").onclick = () => {
     updateSettings({ apiKey: $(container, "#apikey").value.trim(), model: $(container, "#model").value });
     toast("Mentve");
@@ -208,7 +229,7 @@ function settingsView(container) {
     const blob = new Blob([exportData()], { type: "application/json" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
-    a.download = `angol-haladas-${new Date().toISOString().slice(0, 10)}.json`;
+    a.download = `angol-haladas-${localDay()}.json`;
     a.click();
     URL.revokeObjectURL(a.href);
   };
@@ -238,6 +259,7 @@ const ROUTES = {
   car: (c) => carmode.render(c),
   practice: (c, sub) => drills.render(c, sub),
   tutor: (c) => tutorView.render(c),
+  report: (c) => report.render(c),
   plan,
   settings: settingsView,
 };

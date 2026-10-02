@@ -115,6 +115,6 @@ test("pickCards: a kért darabszámot adja, szint szerint szűr", () => {
 test("streak és aktivitás", () => {
   storage.logActivity("car", 600, 20);
   assert.equal(storage.streak(), 1);
-  const today = new Date().toISOString().slice(0, 10);
+  const today = storage.localDay();
   assert.equal(storage.activityDays()[today].seconds, 600);
 });
